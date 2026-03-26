@@ -1,0 +1,174 @@
+networks:
+  medianet:
+    driver: bridge
+
+services:
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    env_file:
+      - .env
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER}
+      - VPN_TYPE=${VPN_TYPE}
+      - OPENVPN_USER=${OPENVPN_USER}
+      - OPENVPN_PASSWORD=${OPENVPN_PASSWORD}
+      - SERVER_COUNTRIES=${SERVER_COUNTRIES}
+      - VPN_PORT_FORWARDING=${VPN_PORT_FORWARDING}
+      - TZ=${TZ}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "${GLUETUN_HEALTHCHECK_URL}"]
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 20s
+    ports:
+      - ${PROWLARR_PORT}:${PROWLARR_PORT}
+      - ${SONARR_PORT}:${SONARR_PORT}
+      - ${RADARR_PORT}:${RADARR_PORT}
+      - ${BAZARR_PORT}:${BAZARR_PORT}
+      - ${QBITTORRENT_WEBUI_PORT}:${QBITTORRENT_WEBUI_PORT}
+      - ${QBITTORRENT_TORRENT_PORT}:${QBITTORRENT_TORRENT_PORT}
+      - ${QBITTORRENT_TORRENT_PORT}:${QBITTORRENT_TORRENT_PORT}/udp
+      - ${FLARESOLVERR_PORT}:${FLARESOLVERR_PORT}
+    networks:
+      - medianet
+    restart: unless-stopped
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./config/prowlarr:/config
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./config/sonarr:/config
+      - ./data:/data
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./config/radarr:/config
+      - ./data:/data
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./config/bazarr:/config
+      - ./data/media:/data/media
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=${QBITTORRENT_WEBUI_PORT}
+      - TORRENTING_PORT=${QBITTORRENT_TORRENT_PORT}
+      - WEBUI_ADDRESS=${QBITTORRENT_WEBUI_ADDRESS}
+      - WEBUI_EXTERNAL_ACCESS=${QBITTORRENT_WEBUI_EXTERNAL_ACCESS}
+    volumes:
+      - ./config/qbit:/config
+      - ./data/downloads:/data/downloads
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '${QBITTORRENT_CPU_LIMIT}'
+          memory: ${QBITTORRENT_MEMORY_LIMIT}
+        reservations:
+          cpus: '${QBITTORRENT_CPU_RESERVATION}'
+          memory: ${QBITTORRENT_MEMORY_RESERVATION}
+    restart: unless-stopped
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL}
+      - TZ=${TZ}
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./config/jellyfin:/config
+      - ./data/media:/data/media
+    ports:
+      - ${JELLYFIN_PORT}:${JELLYFIN_PORT}
+    networks:
+      - medianet
+    restart: unless-stopped
+
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - ./config/jellyseerr:/app/config
+    ports:
+      - ${JELLYSEERR_PORT}:${JELLYSEERR_PORT}
+    networks:
+      - medianet
+    depends_on:
+      - jellyfin
+    restart: unless-stopped
