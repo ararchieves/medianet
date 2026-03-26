@@ -19,11 +19,11 @@ Then edit `.env` and set your VPN credentials (`OPENVPN_USER`, `OPENVPN_PASSWORD
 ## 3) Start the stack
 
 ```bash
-docker compose --env-file .env -f docker-compose.medianet.yaml up -d
+docker compose --env-file .env -f docker-compose.yaml up -d
 ```
 
 ## 4) Stop the stack
 
 ```bash
-docker compose --env-file .env -f docker-compose.medianet.yaml down
+docker compose --env-file .env -f docker-compose.yaml down
 ```
